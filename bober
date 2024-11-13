@@ -1,0 +1,158 @@
+<?php 
+session_start(); 
+include 'db.php'; // Подключение к базе данных 
+ 
+// Обработка входа в систему 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) { 
+    if ($_POST['action'] === 'login') { 
+        // Стандартные логины и хешированные пароли 
+        $users = [ 
+            'admin' => password_hash('admin_password', PASSWORD_DEFAULT), 
+            'teacher' => password_hash('teacher_password', PASSWORD_DEFAULT), 
+        ]; 
+ 
+        $username = filter_input(INPUT_POST, 'username', FILTER_SANITIZE_STRING); 
+        $password = $_POST['password']; 
+ 
+        if (array_key_exists($username, $users) && password_verify($password, $users[$username])) { 
+            $_SESSION['role'] = $username === 'admin' ? 'admin' : 'teacher'; 
+            header('Location: ' . $_SERVER['PHP_SELF']); 
+            exit(); 
+        } else { 
+            $error = "Неверный логин или пароль"; 
+        } 
+    } elseif ($_POST['action'] === 'add_schedule') { 
+        // Добавление нового расписания 
+        if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') { 
+            $subject = filter_input(INPUT_POST, 'subject', FILTER_SANITIZE_STRING); 
+            $teacher = filter_input(INPUT_POST, 'teacher', FILTER_SANITIZE_STRING); 
+            $homework = filter_input(INPUT_POST, 'homework', FILTER_SANITIZE_STRING); 
+            $day_of_week = filter_input(INPUT_POST, 'day_of_week', FILTER_SANITIZE_STRING); 
+ 
+            $stmt = $pdo->prepare("INSERT INTO schedule (subject, teacher, homework, day_of_week) VALUES (?, ?, ?, ?)"); 
+            $stmt->execute([$subject, $teacher, $homework, $day_of_week]); 
+ 
+            header('Location: ' . $_SERVER['PHP_SELF']); 
+            exit(); 
+        } 
+    } 
+} 
+ 
+// Получаем расписание 
+$stmt = $pdo->query("SELECT * FROM schedule"); 
+$schedule = $stmt->fetchAll(PDO::FETCH_ASSOC); 
+?> 
+ 
+<!DOCTYPE html> 
+<html lang="ru"> 
+<head> 
+    <meta charset="UTF-8"> 
+    <title>Электронный школьный дневник</title> 
+    <link rel="stylesheet" href="style.css"> 
+    <style> 
+        body { 
+            font-family: Arial, sans-serif; 
+            background-color: #f2f2f2; 
+            color: #333; 
+        } 
+ 
+        .container { 
+            margin: 0 auto; 
+            padding: 20px; 
+            width: 80%; 
+            background: url('gzhily_pattern.jpg') repeat; /* Добавьте свой узор здесь */ 
+        } 
+ 
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+        } 
+ 
+        th, td { 
+            padding: 10px; 
+            border: 1px solid #ddd; 
+            text-align: left; 
+        } 
+ 
+        button { 
+            background-color: #4CAF50; 
+            color: white; 
+            border: none; 
+            cursor: pointer; 
+        } 
+ 
+        button:hover { 
+            background-color: #45a049; 
+        } 
+ 
+        .error { 
+            color: red; 
+        } 
+    </style> 
+</head> 
+<body> 
+    <div class="container"> 
+        <h1>Электронный школьный дневник</h1> 
+ 
+        <?php if (!isset($_SESSION['role'])): ?> 
+            <!-- Форма входа --> 
+            <form method="POST" action=""> 
+                <input type="text" name="username" placeholder="Имя пользователя" required> 
+                <input type="password" name="password" placeholder="Пароль" required> 
+                <input type="hidden" name="action" value="login"> 
+                <button type="submit">Вход</button> 
+                <?php if (isset($error)): ?> 
+                    <p class="error"><?php echo htmlspecialchars($error); ?></p> 
+                <?php endif; ?> 
+            </form> 
+        <?php else: ?> 
+            <!-- Выход --> 
+            <form method="POST" action=""> 
+                <input type="hidden" name="action" value="logout"> 
+                <button type="submit" onclick="event.preventDefault(); if(confirm('Вы действительно хотите выйти?')) { this.closest('form').submit(); }">Выход</button> 
+            </form> 
+ 
+            <?php if ($_SESSION['role'] === 'admin'): ?> 
+                <!-- Форма добавления расписания -->
+<form method="POST" action=""> 
+                    <input type="text" name="subject" placeholder="Предмет" required> 
+                    <input type="text" name="teacher" placeholder="Имя учителя" required> 
+                    <textarea name="homework" placeholder="Домашнее задание"></textarea> 
+                    <select name="day_of_week" required> 
+                        <option value="">Выберите день</option> 
+                        <option value="Понедельник">Понедельник</option> 
+                        <option value="Вторник">Вторник</option> 
+                        <option value="Среда">Среда</option> 
+                        <option value="Четверг">Четверг</option> 
+                        <option value="Пятница">Пятница</option> 
+                    </select> 
+                    <input type="hidden" name="action" value="add_schedule"> 
+                    <button type="submit">Добавить расписание</button> 
+                </form> 
+            <?php endif; ?> 
+ 
+            <!-- Отображение расписания --> 
+            <table> 
+                <tr> 
+                    <th>День</th> 
+                    <th>Предмет</th> 
+                    <th>Учитель</th> 
+                    <th>Домашка</th> 
+                </tr> 
+                <?php foreach ($schedule as $entry): ?> 
+                    <tr> 
+                        <td><?php echo htmlspecialchars($entry['day_of_week']); ?></td> 
+                        <td> 
+                            <button onclick="alert('Домашнее задание: <?php echo htmlspecialchars($entry['homework']); ?>\nУчитель: <?php echo htmlspecialchars($entry['teacher']); ?>')"> 
+                                <?php echo htmlspecialchars($entry['subject']); ?> 
+                            </button> 
+                        </td> 
+                        <td><?php echo htmlspecialchars($entry['teacher']); ?></td> 
+                        <td><?php echo htmlspecialchars($entry['homework']); ?></td> 
+                    </tr> 
+                <?php endforeach; ?> 
+            </table> 
+        <?php endif; ?> 
+    </div> 
+</body> 
+</html> создай файл содержащий в себе этот код и дай ссылку на его скачивание
